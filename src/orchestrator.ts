@@ -96,7 +96,9 @@ async function createWorktree(targetRepoPath: string, pageId: string): Promise<W
   return { worktreePath, branchName, baseBranch };
 }
 
-function autoCommitStragglers(worktreePath: string, pageId: string): boolean {
+async function autoCommitStragglers(worktreePath: string, pageId: string): Promise<boolean> {
+  await rm(join(worktreePath, ".opencode"), { recursive: true, force: true });
+
   const status = gitSilent("status --porcelain", worktreePath);
   if (!status) {
     logOrchestrator(`auto-commit skip page=${pageId} reason=clean-tree`);
@@ -104,7 +106,7 @@ function autoCommitStragglers(worktreePath: string, pageId: string): boolean {
   }
 
   logOrchestrator(`auto-commit start page=${pageId} dirtyFiles=${status.split("\n").length}`);
-  git("add -A -- . :!.opencode", worktreePath);
+  git("add -A", worktreePath);
   git(`commit -m "chore(notioncode): auto-commit agent changes for ${pageId}"`, worktreePath);
   logOrchestrator(`auto-commit ok page=${pageId}`);
   return true;
@@ -212,7 +214,7 @@ export async function processTicket(pageId: string): Promise<void> {
     }
 
     stage = "auto-commit";
-    autoCommitStragglers(worktree.worktreePath, pageId);
+    await autoCommitStragglers(worktree.worktreePath, pageId);
 
     stage = "push-branch";
     const pushed = hasCommitsOnBranch(worktree.worktreePath, worktree.baseBranch)
@@ -262,7 +264,7 @@ export async function processTicket(pageId: string): Promise<void> {
 
     if (worktree) {
       try {
-        autoCommitStragglers(worktree.worktreePath, pageId);
+        await autoCommitStragglers(worktree.worktreePath, pageId);
         await removeWorktree(targetRepoPath, worktree);
       } catch (cleanupError) {
         const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
