@@ -21,6 +21,7 @@ You were spawned from a Notion ticket. Work only on the ticket in your prompt.
 4. Fix the root cause if verification fails.
 5. Commit all your changes with a descriptive message before finishing.
 6. Push the current branch to origin.
+7. Create a pull request to main using `gh pr create --fill`.
 
 ## Reporting
 - Report what changed, where, and how you verified it.
