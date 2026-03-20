@@ -1,0 +1,37 @@
+# Decisions
+
+- `spawnAgent(config)` defaults to `claude -p` and accepts `runner: "claude" | "opencode"` as the smallest explicit switch for subprocess selection.
+- `renderAgentPrompt()` is included as a tiny placeholder helper for future template expansion, but the spawner itself treats `prompt` as the final command argument.
+
+- Interpreting plan ambiguity: TODO item 4 is treated as the AGENTS.md template task promised in TL;DR/Execution Strategy, and TODO item 5 remains the orchestrator implementation.
+- For the scaffold, `run`, `start`, `setup`, and `serve` are present but stubbed; only `run` is required to print `not implemented yet` for acceptance.
+- Use a root-level `AGENTS.md` instead of a nested templates folder, because it is the simplest downstream target for spawned agents and keeps the handoff obvious.
+- `getTicket(pageId)` returns flattened Notion properties plus normalized `id/title/description/status` fields so downstream code can use either shape.
+- `updateStatus(pageId, status)` inspects the page schema and writes to either a `status` or `select` property, which keeps the client compatible with both Notion database styles.
+- `listTickets()` now resolves the database's first data source at runtime and queries that data source directly, matching the installed SDK's `dataSources.query()` API.
+- `src/notion.ts` reads `NOTION_TOKEN` and `NOTION_DATABASE_ID` only inside helpers, so env validation happens on use instead of at import time.
+- `processTicket(pageId)` now handles the full lifecycle with existing modules only (`src/notion.ts` + `src/agent.ts`): set `In progress`, post start comment, run agent, detect PR URL with `https://github.com/.+/pull/\d+`, then write `Done` or `Failed` plus a result comment.
+- `processAllTickets()` intentionally remains sequential (no queue/retries/parallelism) to match plan scope and avoid additional orchestration complexity.
+- Listener link generation uses the active local listener port (`NOTIONCODE_PORT`/`PORT`, default `3210`) so `NotionCode Link` always points to a reachable `/start?page=...` endpoint.
+- `/start` loads `processTicket` dynamically from `./orchestrator.ts` and treats failures as run-level errors in `/status`, keeping the HTTP acknowledgement non-blocking even when orchestration is unavailable.
+- When a PR URL is detected, orchestrator now writes it to the Notion card via `updateProperty(pageId, "PR Link", prUrl)` in addition to posting the success comment.
+- `processTicket(pageId)` now rethrows after recording `Failed` state/comment, while `processAllTickets()` catches per-ticket errors to continue sequential processing of later tickets.
+- Replace the old `serve` scaffold command with the plan-driven `listen` command, and add `list` so the CLI can show ticket status without touching orchestration.
+- `setup` validates `NOTION_TOKEN`, `NOTION_DATABASE_ID`, `ANTHROPIC_API_KEY`, and `TARGET_REPO_PATH`, then probes `listTickets()` before printing localhost/ngrok guidance.
+- Async command handlers use a shared `runCommand()` wrapper so failures print once and set `process.exitCode = 1` without adding interactive behavior.
+- Agent-provider selection now lives in `src/agent.ts`: default fallback is `OPENAI_API_KEY` → `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`, `AGENT_PROVIDER` can pin a provider, and `AGENT_RUNNER=claude` narrows compatible fallback to Anthropic instead of silently launching an invalid combo.
+- Default runner selection is now provider-aware (`claude` for Anthropic, `opencode` for OpenAI/Gemini), and invalid runner/provider pairs fail before subprocess spawn with a clear compatibility error.
+- Instrumentation stays inline in `src/agent.ts`, `src/orchestrator.ts`, `src/listener.ts`, and `src/notion.ts` instead of adding a shared logging module, so the scope stays limited to the debugging pass and exported APIs remain unchanged.
+- Notion retry visibility is handled by configuring the SDK logger for stable `[NOTION]` / `[LISTENER]` retry lines while preserving the existing request behavior and local wrapper logic.
+- Add a dedicated `POST /webhook` listener path (default `/webhook`, configurable via `NOTIONCODE_WEBHOOK_PATH`) while preserving existing `GET /start`, `GET /status`, and `GET /health` flows.
+- Webhook trigger gating is minimal and explicit: process only `comment.created`, fetch comment text via `comments.retrieve`, require `@NotionCode start` (case-insensitive, optional `@`), and ignore all other events.
+- Duplicate webhook deliveries are deduped at hackathon scope by skipping new starts when a run for the same `pageId` is already active; deduped responses return the existing `runId`.
+- Introduce optional `NOTION_API_BASE_URL` for listener/notion clients so mocked end-to-end webhook and fallback harnesses can run locally without changing architecture or dependencies.
+- Keep the non-interactive fix isolated to `src/agent.ts`: apply `OPENCODE_PERMISSION=allow` only when spawning `runner="opencode"`, and leave `claude` spawn environment behavior unchanged.
+- Expose the forced mode with a concise safe log field (`nonInteractivePermission`) so live runs can prove permission forcing without logging secrets.
+- Enforce direct-execution behavior for spawned `opencode` children by injecting `OPENCODE_CONFIG_CONTENT` with tool-level denies for `task` and `call_omo_agent`; this is applied only in `spawnAgent()` when `runner="opencode"`.
+- Preserve existing provider fallback, runner compatibility, and `OPENCODE_PERMISSION=allow` semantics; new logs now surface delegation restriction mode (`active:created|merged|reset-invalid`) and restricted tool names without exposing secret values.
+- For task 9, keep the repo-side demo assets in `README.md` plus `docs/notion-database-template.md`, `docs/demo-sample-tickets.md`, and `docs/demo-script.md` so setup, sample data, and narration stay separate.
+- The sample tickets remain manual copy and paste content, not remote Notion writes, because the current shell has no live Notion credentials.
+- `PR Link` in the demo database should be documented as rich text because the runtime writes it through `updateProperty(..., rich_text)` rather than a URL property.
+- For spawned `opencode` children, keep delegation blocking in `OPENCODE_CONFIG_CONTENT` and send `OPENCODE_PERMISSION` as JSON `"allow"`; this preserves non-interactive execution without triggering the OpenCode bootstrap parser.
