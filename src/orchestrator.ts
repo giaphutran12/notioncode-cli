@@ -91,7 +91,6 @@ async function createWorktree(targetRepoPath: string, pageId: string): Promise<W
     join(opencodeConfigDir, "opencode.json"),
     JSON.stringify({ "$schema": "https://opencode.ai/config.json", plugin: [] })
   );
-  await writeFile(join(worktreePath, ".git", "info", "exclude"), ".opencode/\n", { flag: "a" });
   logOrchestrator(`worktree create ok page=${pageId} branch=${quote(branchName)} pluginsDisabled=true`);
 
   return { worktreePath, branchName, baseBranch };
@@ -105,7 +104,7 @@ function autoCommitStragglers(worktreePath: string, pageId: string): boolean {
   }
 
   logOrchestrator(`auto-commit start page=${pageId} dirtyFiles=${status.split("\n").length}`);
-  git("add -A", worktreePath);
+  git("add -A -- . :!.opencode", worktreePath);
   git(`commit -m "chore(notioncode): auto-commit agent changes for ${pageId}"`, worktreePath);
   logOrchestrator(`auto-commit ok page=${pageId}`);
   return true;
