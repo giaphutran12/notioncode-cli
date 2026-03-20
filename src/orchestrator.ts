@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { access, readFile, mkdir, rm } from "node:fs/promises";
+import { access, readFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,7 +84,15 @@ async function createWorktree(targetRepoPath: string, pageId: string): Promise<W
   logOrchestrator(`worktree create start page=${pageId} branch=${quote(branchName)} base=${quote(baseBranch)} path=${quote(worktreePath)}`);
 
   git(`worktree add ${JSON.stringify(worktreePath)} -b ${branchName} ${baseBranch}`, targetRepoPath);
-  logOrchestrator(`worktree create ok page=${pageId} branch=${quote(branchName)}`);
+
+  const opencodeConfigDir = join(worktreePath, ".opencode");
+  await mkdir(opencodeConfigDir, { recursive: true });
+  await writeFile(
+    join(opencodeConfigDir, "opencode.json"),
+    JSON.stringify({ "$schema": "https://opencode.ai/config.json", plugin: [] })
+  );
+  await writeFile(join(worktreePath, ".git", "info", "exclude"), ".opencode/\n", { flag: "a" });
+  logOrchestrator(`worktree create ok page=${pageId} branch=${quote(branchName)} pluginsDisabled=true`);
 
   return { worktreePath, branchName, baseBranch };
 }
