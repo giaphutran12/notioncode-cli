@@ -19,6 +19,8 @@ You were spawned from a Notion ticket. Work only on the ticket in your prompt.
 2. Implement the change.
 3. Run the repo's normal verification, or the lightest check that proves the change works.
 4. Fix the root cause if verification fails.
+5. Commit all your changes with a descriptive message before finishing.
+6. Push the current branch to origin.
 
 ## Reporting
 - Report what changed, where, and how you verified it.
