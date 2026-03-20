@@ -1,4 +1,5 @@
 import { Client, LogLevel } from "@notionhq/client";
+import { killAllAgents } from "./agent";
 import { getCommentDetails, getTicket } from "./notion";
 
 const DEFAULT_PORT = 3210;
@@ -725,6 +726,16 @@ export async function startListener(options: StartListenerOptions = {}): Promise
       return new Response("Not Found", { status: 404 });
     },
   });
+
+  const shutdown = () => {
+    logListener(`shutdown start activeRuns=${activeRuns.size}`);
+    const killed = killAllAgents();
+    logListener(`shutdown complete killedAgents=${killed}`);
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
 
   console.log(READY_MESSAGE);
   console.log(`${LISTENER_LOG_PREFIX} Webhook endpoint: http://localhost:${port}${webhookPath}`);

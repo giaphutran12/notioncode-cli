@@ -11,6 +11,7 @@ type AgentEnv = Record<string, string | undefined>;
 const AGENT_LOG_PREFIX = "[AGENT]";
 const OPENCODE_ENV_PREFIX = "OPENCODE";
 const HEARTBEAT_INTERVAL_MS = 15_000;
+const activeChildPids = new Set<number>();
 
 const AGENT_PROVIDER_ORDER: readonly AgentProvider[] = ["openai", "anthropic", "gemini"];
 const AGENT_API_KEY_ENV_VARS: Record<AgentProvider, AgentApiKeyEnvVar> = {
@@ -266,6 +267,22 @@ function createCanceledResult(startTime: number, stdout = "", stderr = ""): Spaw
   };
 }
 
+export function killAllAgents(): number {
+  let killed = 0;
+  for (const pid of activeChildPids) {
+    try {
+      process.kill(pid, "SIGTERM");
+      killed += 1;
+      logAgent(`kill pid=${pid}`);
+    } catch {
+      logAgent(`kill skip pid=${pid} reason=already-exited`);
+    }
+  }
+  activeChildPids.clear();
+  logAgent(`kill complete killed=${killed}`);
+  return killed;
+}
+
 export function renderAgentPrompt(template: string, values: Record<string, string> = {}): string {
   return template.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, key: string) => {
     return Object.prototype.hasOwnProperty.call(values, key) ? values[key] ?? match : match;
@@ -305,8 +322,12 @@ export async function spawnAgent(config: SpawnAgentConfig): Promise<SpawnAgentRe
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  if (child.pid) {
+    activeChildPids.add(child.pid);
+  }
+
   logAgent(
-    `spawn started provider=${config.provider} runner=${runner} command=${command} pid=${child.pid ?? "unknown"} cwd=${quote(config.workDir)} promptChars=${config.prompt.length}`
+    `spawn started provider=${config.provider} runner=${runner} command=${command} pid=${child.pid ?? "unknown"} cwd=${quote(config.workDir)} promptChars=${config.prompt.length} tracked=${activeChildPids.size}`
   );
 
   let stdout = "";
@@ -354,6 +375,9 @@ export async function spawnAgent(config: SpawnAgentConfig): Promise<SpawnAgentRe
     const cleanup = () => {
       clearInterval(heartbeat);
       config.signal?.removeEventListener("abort", abortHandler);
+      if (child.pid) {
+        activeChildPids.delete(child.pid);
+      }
     };
 
     const finish = (value: SpawnAgentResult) => {
